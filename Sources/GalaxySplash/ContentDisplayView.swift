@@ -83,6 +83,7 @@ public struct ContentDisplayView: UIViewRepresentable {
         var parent: ContentDisplayView
         weak var galaxyWVView: WKWebView?
         weak var galaxyRefreshControl: UIRefreshControl?
+        var popupWebView: WKWebView? // Для OAuth popup
         
         init(_ parent: ContentDisplayView) {
             self.parent = parent
@@ -192,13 +193,20 @@ public struct ContentDisplayView: UIViewRepresentable {
         public func webView(_ webView: WKWebView,
                             decidePolicyFor action: WKNavigationAction,
                             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            
+            let isPopup = webView == popupWebView
+            let prefix = isPopup ? "🟣 [POPUP]" : "🔵 [MAIN]"
+            
             if let url = action.request.url {
+                print("\(prefix) decidePolicyFor: \(url.absoluteString)")
+                
                 let scheme = url.scheme?.lowercased()
                 let urlStr = url.absoluteString.lowercased()
                 
                 // Открываем внешние схемы в системе
                 if let scheme = scheme,
                    scheme != "http", scheme != "https", scheme != "about" {
+                    print("\(prefix) Открываем внешнюю схему: \(scheme)")
                     UIApplication.shared.open(url, options: [:], completionHandler: nil)
                     decisionHandler(.cancel)
                     return
@@ -206,6 +214,7 @@ public struct ContentDisplayView: UIViewRepresentable {
                 
                 // ✅ Фоллбек: если target="_blank" и по какой-то причине не вызвался createWebViewWith
                 if action.targetFrame == nil {
+                    print("\(prefix) targetFrame == nil, загружаем в текущий WebView")
                     webView.load(URLRequest(url: url))
                     decisionHandler(.cancel)
                     return
@@ -225,46 +234,114 @@ public struct ContentDisplayView: UIViewRepresentable {
             print("   targetFrame: \(navAction.targetFrame?.description ?? "nil")")
             print("   navigationType: \(navAction.navigationType.rawValue)")
             
-            // Если URL пустой или about:blank, возможно нужно создать WebView и вернуть его
-            // Сайт сам загрузит контент позже
-            if let url = navAction.request.url, !url.absoluteString.isEmpty {
+            // Если URL пустой или about:blank - это OAuth popup
+            // Нужно создать новый WebView и ДОБАВИТЬ его на экран
+            if let url = navAction.request.url, 
+               !url.absoluteString.isEmpty,
+               url.absoluteString != "about:blank" {
                 print("✅ Загружаем URL в текущий WebView: \(url.absoluteString)")
                 webView.load(URLRequest(url: url))
+                return nil
             } else {
-                print("⚠️ URL пустой или отсутствует, возможно нужно вернуть новый WebView")
-                // Попробуем создать и вернуть новый WebView
-                let newWebView = WKWebView(frame: webView.bounds, configuration: configuration)
-                newWebView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                newWebView.navigationDelegate = self
-                newWebView.uiDelegate = self
-                return newWebView
+                print("⚠️ Создаем popup WebView для OAuth")
+                
+                // Создаем popup WebView
+                let popup = WKWebView(frame: webView.bounds, configuration: configuration)
+                popup.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                popup.navigationDelegate = self
+                popup.uiDelegate = self
+                popup.backgroundColor = .black
+                
+                print("   📦 Popup создан, frame: \(popup.frame)")
+                print("   📦 Parent webView frame: \(webView.frame)")
+                
+                // ВАЖНО: Добавляем popup на экран!
+                webView.addSubview(popup)
+                print("   ✅ Popup добавлен как subview")
+                print("   🪟 Popup superview: \(popup.superview != nil ? "есть" : "нет")")
+                print("   🎯 Число subviews в main WebView: \(webView.subviews.count)")
+                
+                // Добавляем кнопку закрытия
+                let closeButton = UIButton(type: .system)
+                closeButton.setTitle("✕", for: .normal)
+                closeButton.titleLabel?.font = .systemFont(ofSize: 28, weight: .bold)
+                closeButton.setTitleColor(.white, for: .normal)
+                closeButton.backgroundColor = UIColor.black.withAlphaComponent(0.7)
+                closeButton.layer.cornerRadius = 22
+                closeButton.frame = CGRect(x: webView.bounds.width - 64, y: 50, width: 44, height: 44)
+                closeButton.autoresizingMask = [.flexibleLeftMargin, .flexibleBottomMargin]
+                closeButton.addTarget(self, action: #selector(closePopup), for: .touchUpInside)
+                popup.addSubview(closeButton)
+                
+                print("   🔘 Кнопка закрытия добавлена")
+                
+                // Сохраняем ссылку на popup
+                self.popupWebView = popup
+                
+                print("✅ Popup WebView создан и добавлен на экран")
+                return popup
             }
-            
-            return nil
         }
         
         
+        // Закрытие popup
+        @objc private func closePopup() {
+            print("🔴 Закрываем popup")
+            popupWebView?.removeFromSuperview()
+            popupWebView = nil
+            
+            // Перезагружаем основной WebView после закрытия popup
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.galaxyWVView?.reload()
+            }
+        }
+        
+        // Автоматическое закрытие popup (вызывается сайтом через window.close())
+        public func webViewDidClose(_ webView: WKWebView) {
+            print("🟡 webViewDidClose вызван")
+            if webView == popupWebView {
+                closePopup()
+            }
+        }
+        
         // Обработка начала навигации
         public func webView(_ galaxyWebView: WKWebView, didStartProvisionalNavigation galaxyNavigation: WKNavigation!) {
-            // Опциональная обработка начала навигации
+            let isPopup = galaxyWebView == popupWebView
+            let prefix = isPopup ? "🟣 [POPUP]" : "🔵 [MAIN]"
+            print("\(prefix) didStartProvisionalNavigation: \(galaxyWebView.url?.absoluteString ?? "nil")")
         }
         
         // Обработка завершения загрузки
         public func webView(_ galaxyWebView: WKWebView, didFinish galaxyNavigation: WKNavigation!) {
             galaxyRefreshControl?.endRefreshing()
             
+            let isPopup = galaxyWebView == popupWebView
+            let prefix = isPopup ? "🟣 [POPUP]" : "🔵 [MAIN]"
+            print("\(prefix) didFinish: \(galaxyWebView.url?.absoluteString ?? "nil")")
             
-           
+            // Проверяем размеры popup
+            if isPopup {
+                print("   📏 Popup frame: \(galaxyWebView.frame)")
+                print("   👁️ Popup isHidden: \(galaxyWebView.isHidden)")
+                print("   🎨 Popup alpha: \(galaxyWebView.alpha)")
+                print("   🪟 Popup superview: \(galaxyWebView.superview != nil ? "есть" : "нет")")
+            }
         }
         
         // Обработка ошибок загрузки
         public func webView(_ galaxyWebView: WKWebView, didFail galaxyNavigation: WKNavigation!, withError galaxyError: Error) {
             galaxyRefreshControl?.endRefreshing()
+            
+            let isPopup = galaxyWebView == popupWebView
+            let prefix = isPopup ? "🟣 [POPUP]" : "🔵 [MAIN]"
+            print("\(prefix) didFail: \(galaxyError.localizedDescription)")
         }
         
         // Обработка ошибок загрузки (провизорная навигация)
         public func webView(_ galaxyWebView: WKWebView, didFailProvisionalNavigation galaxyNavigation: WKNavigation!, withError galaxyError: Error) {
-           
+            let isPopup = galaxyWebView == popupWebView
+            let prefix = isPopup ? "🟣 [POPUP]" : "🔵 [MAIN]"
+            print("\(prefix) didFailProvisionalNavigation: \(galaxyError.localizedDescription)")
         }
     }
 }
