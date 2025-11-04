@@ -84,6 +84,7 @@ public struct ContentDisplayView: UIViewRepresentable {
         var parent: ContentDisplayView
         weak var galaxyWVView: WKWebView?
         weak var galaxyRefreshControl: UIRefreshControl?
+        var oauthWebView: WKWebView? // Временный WebView для OAuth
         
         init(_ parent: ContentDisplayView) {
             self.parent = parent
@@ -219,7 +220,7 @@ public struct ContentDisplayView: UIViewRepresentable {
             decisionHandler(.allow)
         }
         
-        // Обработка дочерних окон - загружаем в том же WebView
+        // Обработка дочерних окон - перехватываем URL для основного WebView
         public func webView(_ webView: WKWebView,
                             createWebViewWith configuration: WKWebViewConfiguration,
                             for navAction: WKNavigationAction,
@@ -228,19 +229,60 @@ public struct ContentDisplayView: UIViewRepresentable {
             print("🟢 createWebViewWith вызван!")
             print("   URL: \(navAction.request.url?.absoluteString ?? "nil")")
             
-            // Загружаем все popup (в том числе OAuth) в том же WebView
-            // Пользователь сможет свайпнуть назад после авторизации
-            if let url = navAction.request.url {
-                print("✅ Загружаем OAuth в текущий WebView (со свайпом назад)")
+            // Если URL есть - загружаем в текущий WebView
+            if let url = navAction.request.url, 
+               !url.absoluteString.isEmpty,
+               url.absoluteString != "about:blank" {
+                print("✅ URL есть - загружаем OAuth в основной WebView")
                 webView.load(URLRequest(url: url))
+                return nil
             }
             
-            return nil
+            // Если URL пустой - создаем СКРЫТЫЙ временный WebView
+            // Он перехватит URL, который загрузит JavaScript, и передаст в основной WebView
+            print("⚠️ URL пустой - создаем временный WebView для перехвата URL")
+            
+            let tempView = WKWebView(frame: .zero, configuration: configuration)
+            tempView.navigationDelegate = self
+            tempView.uiDelegate = self
+            tempView.isHidden = true // Скрываем! Нужен только для перехвата URL
+            
+            // НЕ добавляем на экран, только сохраняем ссылку
+            self.oauthWebView = tempView
+            
+            print("✅ Временный WebView создан (скрытый)")
+            return tempView
+        }
+        
+        // Закрытие временного WebView
+        public func webViewDidClose(_ webView: WKWebView) {
+            print("🟡 webViewDidClose вызван")
+            if webView == oauthWebView {
+                oauthWebView = nil
+                print("✅ Временный WebView очищен")
+            }
         }
         
         // Обработка начала навигации
         public func webView(_ galaxyWebView: WKWebView, didStartProvisionalNavigation galaxyNavigation: WKNavigation!) {
-            print("🔵 didStartProvisionalNavigation: \(galaxyWebView.url?.absoluteString ?? "nil")")
+            let url = galaxyWebView.url?.absoluteString ?? "nil"
+            
+            // Если это временный WebView - перехватываем URL и загружаем в основной
+            if galaxyWebView == oauthWebView, let realUrl = galaxyWebView.url {
+                print("🎯 Перехватили URL из временного WebView: \(realUrl.absoluteString)")
+                
+                // Загружаем в основной WebView
+                if let mainWebView = galaxyWVView {
+                    print("✅ Загружаем в основной WebView")
+                    mainWebView.load(URLRequest(url: realUrl))
+                    
+                    // Очищаем временный WebView
+                    oauthWebView = nil
+                }
+                return
+            }
+            
+            print("🔵 didStartProvisionalNavigation: \(url)")
         }
         
         // Обработка завершения загрузки
