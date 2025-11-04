@@ -196,7 +196,31 @@ public struct ContentDisplayView: UIViewRepresentable {
                             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             
             if let url = action.request.url {
-                print("🔵 [MAIN] decidePolicyFor: \(url.absoluteString)")
+                let urlString = url.absoluteString
+                
+                // Если это временный WebView - перехватываем РЕАЛЬНЫЙ URL здесь!
+                if webView == oauthWebView {
+                    if !urlString.isEmpty && 
+                       urlString != "about:blank" &&
+                       !urlString.hasPrefix("about:") {
+                        print("🎯 [decidePolicyFor] Перехватили URL из временного WebView: \(urlString)")
+                        
+                        // Загружаем в основной WebView
+                        if let mainWebView = galaxyWVView {
+                            print("✅ Загружаем в основной WebView")
+                            mainWebView.load(URLRequest(url: url))
+                            
+                            // Очищаем временный WebView
+                            oauthWebView = nil
+                        }
+                        decisionHandler(.cancel)
+                        return
+                    } else {
+                        print("⏳ [decidePolicyFor] Временный WebView: \(urlString)")
+                    }
+                }
+                
+                print("🔵 decidePolicyFor: \(urlString)")
                 
                 let scheme = url.scheme?.lowercased()
                 
@@ -267,19 +291,28 @@ public struct ContentDisplayView: UIViewRepresentable {
         public func webView(_ galaxyWebView: WKWebView, didStartProvisionalNavigation galaxyNavigation: WKNavigation!) {
             let url = galaxyWebView.url?.absoluteString ?? "nil"
             
-            // Если это временный WebView - перехватываем URL и загружаем в основной
+            // Если это временный WebView - перехватываем РЕАЛЬНЫЙ URL (не about:blank)
             if galaxyWebView == oauthWebView, let realUrl = galaxyWebView.url {
-                print("🎯 Перехватили URL из временного WebView: \(realUrl.absoluteString)")
+                let urlString = realUrl.absoluteString
                 
-                // Загружаем в основной WebView
-                if let mainWebView = galaxyWVView {
-                    print("✅ Загружаем в основной WebView")
-                    mainWebView.load(URLRequest(url: realUrl))
+                // Игнорируем пустые URL и about:blank
+                if !urlString.isEmpty && 
+                   urlString != "about:blank" &&
+                   !urlString.hasPrefix("about:") {
+                    print("🎯 Перехватили РЕАЛЬНЫЙ URL из временного WebView: \(urlString)")
                     
-                    // Очищаем временный WebView
-                    oauthWebView = nil
+                    // Загружаем в основной WebView
+                    if let mainWebView = galaxyWVView {
+                        print("✅ Загружаем в основной WebView")
+                        mainWebView.load(URLRequest(url: realUrl))
+                        
+                        // Очищаем временный WebView
+                        oauthWebView = nil
+                    }
+                    return
+                } else {
+                    print("⏳ Временный WebView загружает: \(urlString) - ждем реальный URL")
                 }
-                return
             }
             
             print("🔵 didStartProvisionalNavigation: \(url)")
