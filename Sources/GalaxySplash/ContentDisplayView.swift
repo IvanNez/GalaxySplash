@@ -219,13 +219,27 @@ public struct ContentDisplayView: UIViewRepresentable {
                             createWebViewWith configuration: WKWebViewConfiguration,
                             for navAction: WKNavigationAction,
                             windowFeatures: WKWindowFeatures) -> WKWebView? {
-            // Открываем «новое окно» (window.open) в том же webView
-            if let url = navAction.request.url {
-                print("🔵 createWebViewWith вызван для URL: \(url.absoluteString)")
+            
+            print("🟢 createWebViewWith вызван!")
+            print("   URL: \(navAction.request.url?.absoluteString ?? "nil")")
+            print("   targetFrame: \(navAction.targetFrame?.description ?? "nil")")
+            print("   navigationType: \(navAction.navigationType.rawValue)")
+            
+            // Если URL пустой или about:blank, возможно нужно создать WebView и вернуть его
+            // Сайт сам загрузит контент позже
+            if let url = navAction.request.url, !url.absoluteString.isEmpty {
+                print("✅ Загружаем URL в текущий WebView: \(url.absoluteString)")
                 webView.load(URLRequest(url: url))
             } else {
-                print("🔴 createWebViewWith вызван, но URL отсутствует")
+                print("⚠️ URL пустой или отсутствует, возможно нужно вернуть новый WebView")
+                // Попробуем создать и вернуть новый WebView
+                let newWebView = WKWebView(frame: webView.bounds, configuration: configuration)
+                newWebView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                newWebView.navigationDelegate = self
+                newWebView.uiDelegate = self
+                return newWebView
             }
+            
             return nil
         }
         
