@@ -219,9 +219,12 @@ public struct ContentDisplayView: UIViewRepresentable {
                             createWebViewWith configuration: WKWebViewConfiguration,
                             for navAction: WKNavigationAction,
                             windowFeatures: WKWindowFeatures) -> WKWebView? {
-            // Открываем «новое окно» в том же webView
-            if navAction.targetFrame == nil, let url = navAction.request.url {
+            // Открываем «новое окно» (window.open) в том же webView
+            if let url = navAction.request.url {
+                print("🔵 createWebViewWith вызван для URL: \(url.absoluteString)")
                 webView.load(URLRequest(url: url))
+            } else {
+                print("🔴 createWebViewWith вызван, но URL отсутствует")
             }
             return nil
         }
