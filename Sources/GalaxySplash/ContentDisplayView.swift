@@ -203,31 +203,21 @@ public struct ContentDisplayView: UIViewRepresentable {
                     if !urlString.isEmpty && 
                        urlString != "about:blank" &&
                        !urlString.hasPrefix("about:") {
-                        print("🎯 [decidePolicyFor] Перехватили URL из временного WebView: \(urlString)")
-                        
                         // Загружаем в основной WebView
                         if let mainWebView = galaxyWVView {
-                            print("✅ Загружаем в основной WebView")
                             mainWebView.load(URLRequest(url: url))
-                            
-                            // Очищаем временный WebView
                             oauthWebView = nil
                         }
                         decisionHandler(.cancel)
                         return
-                    } else {
-                        print("⏳ [decidePolicyFor] Временный WebView: \(urlString)")
                     }
                 }
-                
-                print("🔵 decidePolicyFor: \(urlString)")
                 
                 let scheme = url.scheme?.lowercased()
                 
                 // Открываем внешние схемы в системе
                 if let scheme = scheme,
                    scheme != "http", scheme != "https", scheme != "about" {
-                    print("🔵 Открываем внешнюю схему: \(scheme)")
                     UIApplication.shared.open(url, options: [:], completionHandler: nil)
                     decisionHandler(.cancel)
                     return
@@ -235,7 +225,6 @@ public struct ContentDisplayView: UIViewRepresentable {
                 
                 // OAuth popup - загружаем в том же WebView (со свайпом назад)
                 if action.targetFrame == nil {
-                    print("🔵 targetFrame == nil (OAuth), загружаем в текущий WebView")
                     webView.load(URLRequest(url: url))
                     decisionHandler(.cancel)
                     return
@@ -250,47 +239,34 @@ public struct ContentDisplayView: UIViewRepresentable {
                             for navAction: WKNavigationAction,
                             windowFeatures: WKWindowFeatures) -> WKWebView? {
             
-            print("🟢 createWebViewWith вызван!")
-            print("   URL: \(navAction.request.url?.absoluteString ?? "nil")")
-            
             // Если URL есть - загружаем в текущий WebView
             if let url = navAction.request.url, 
                !url.absoluteString.isEmpty,
                url.absoluteString != "about:blank" {
-                print("✅ URL есть - загружаем OAuth в основной WebView")
                 webView.load(URLRequest(url: url))
                 return nil
             }
             
             // Если URL пустой - создаем СКРЫТЫЙ временный WebView
             // Он перехватит URL, который загрузит JavaScript, и передаст в основной WebView
-            print("⚠️ URL пустой - создаем временный WebView для перехвата URL")
-            
             let tempView = WKWebView(frame: .zero, configuration: configuration)
             tempView.navigationDelegate = self
             tempView.uiDelegate = self
-            tempView.isHidden = true // Скрываем! Нужен только для перехвата URL
+            tempView.isHidden = true
             
-            // НЕ добавляем на экран, только сохраняем ссылку
             self.oauthWebView = tempView
-            
-            print("✅ Временный WebView создан (скрытый)")
             return tempView
         }
         
         // Закрытие временного WebView
         public func webViewDidClose(_ webView: WKWebView) {
-            print("🟡 webViewDidClose вызван")
             if webView == oauthWebView {
                 oauthWebView = nil
-                print("✅ Временный WebView очищен")
             }
         }
         
         // Обработка начала навигации
         public func webView(_ galaxyWebView: WKWebView, didStartProvisionalNavigation galaxyNavigation: WKNavigation!) {
-            let url = galaxyWebView.url?.absoluteString ?? "nil"
-            
             // Если это временный WebView - перехватываем РЕАЛЬНЫЙ URL (не about:blank)
             if galaxyWebView == oauthWebView, let realUrl = galaxyWebView.url {
                 let urlString = realUrl.absoluteString
@@ -299,40 +275,29 @@ public struct ContentDisplayView: UIViewRepresentable {
                 if !urlString.isEmpty && 
                    urlString != "about:blank" &&
                    !urlString.hasPrefix("about:") {
-                    print("🎯 Перехватили РЕАЛЬНЫЙ URL из временного WebView: \(urlString)")
-                    
                     // Загружаем в основной WebView
                     if let mainWebView = galaxyWVView {
-                        print("✅ Загружаем в основной WebView")
                         mainWebView.load(URLRequest(url: realUrl))
-                        
-                        // Очищаем временный WebView
                         oauthWebView = nil
                     }
                     return
-                } else {
-                    print("⏳ Временный WebView загружает: \(urlString) - ждем реальный URL")
                 }
             }
-            
-            print("🔵 didStartProvisionalNavigation: \(url)")
         }
         
         // Обработка завершения загрузки
         public func webView(_ galaxyWebView: WKWebView, didFinish galaxyNavigation: WKNavigation!) {
             galaxyRefreshControl?.endRefreshing()
-            print("🔵 didFinish: \(galaxyWebView.url?.absoluteString ?? "nil")")
         }
         
         // Обработка ошибок загрузки
         public func webView(_ galaxyWebView: WKWebView, didFail galaxyNavigation: WKNavigation!, withError galaxyError: Error) {
             galaxyRefreshControl?.endRefreshing()
-            print("🔵 didFail: \(galaxyError.localizedDescription)")
         }
         
         // Обработка ошибок загрузки (провизорная навигация)
         public func webView(_ galaxyWebView: WKWebView, didFailProvisionalNavigation galaxyNavigation: WKNavigation!, withError galaxyError: Error) {
-            print("🔵 didFailProvisionalNavigation: \(galaxyError.localizedDescription)")
+            // Обработка ошибок
         }
     }
 }
