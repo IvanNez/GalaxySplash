@@ -43,8 +43,9 @@ public struct ContentDisplayView: UIViewRepresentable {
         // Настройка жестов
         galaxyView.allowsBackForwardNavigationGestures = allowsGestures
         
-        // Настройка User Agent (iOS 18.0 Safari 16.0)
-        galaxyView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+        // Настройка User Agent - используем современный Safari для поддержки OAuth
+        // Обновленный User Agent с актуальной версией Safari (Version/18.0)
+        galaxyView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
         
         // Настройка координатора
         galaxyView.navigationDelegate = context.coordinator
