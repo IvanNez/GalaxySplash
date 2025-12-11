@@ -10,13 +10,13 @@ let package = Package(
         .library(name: "GalaxySplash", targets: ["GalaxySplash"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/OneSignal/OneSignal-XCFramework", from: "5.0.0"),
+        .package(url: "https://github.com/OneSignal/OneSignal-iOS-SDK", from: "5.0.0"),
     ],
     targets: [
         .target(
             name: "GalaxySplash",
             dependencies: [
-                .product(name: "OneSignalFramework", package: "OneSignal-XCFramework")
+                .product(name: "OneSignalFramework", package: "OneSignal-iOS-SDK")
             ]
         ),
         .testTarget(
